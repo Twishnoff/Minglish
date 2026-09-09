@@ -342,15 +342,17 @@ function applyAttemptResult(result) {
   w.tries = result.tries;
   if (result.finalStatus) w.finalStatus = result.finalStatus;
 
+  const acc = Math.round(result.accuracyScore ?? 0);
+
   if (result.finalStatus === 'correct') {
-    showFeedback('correct', `Nice — that counted as correct (heard: "${result.recognizedText}").`);
+    showFeedback('correct', `Nice — that counted as correct (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
   } else if (result.finalStatus === 'incorrect') {
-    showFeedback('incorrect', `Marked incorrect for today (heard: "${result.recognizedText}"). Keep practicing — it'll come back tomorrow.`);
+    showFeedback('incorrect', `Marked incorrect for today (heard: "${result.recognizedText}", accuracy: ${acc}%). Keep practicing — it'll come back tomorrow.`);
   } else if (result.passed) {
     // Passed a free retry on an already-decided word.
-    showFeedback('correct', `That one sounded right (heard: "${result.recognizedText}").`);
+    showFeedback('correct', `That one sounded right (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
   } else {
-    showFeedback('pending', `Not quite (heard: "${result.recognizedText}") — try again.`);
+    showFeedback('pending', `Not quite (heard: "${result.recognizedText}", accuracy: ${acc}%) — try again.`);
   }
 
   // Refresh top-bar performance from the server so the percentage stays
