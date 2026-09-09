@@ -75,6 +75,7 @@ el.logoutBtn.addEventListener('click', () => {
 });
 
 async function startApp(email) {
+  currentIndex = 0;
   el.loginScreen.hidden = true;
   el.appScreen.hidden = false;
   await loadState(email);

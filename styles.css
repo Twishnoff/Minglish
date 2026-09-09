@@ -135,6 +135,7 @@ main {
   padding: 20px 10px;
   color: var(--text);
   width: 100%;
+  text-align: center;
 }
 .word-display:hover { color: var(--accent); }
 .word-popup {
@@ -173,7 +174,7 @@ main {
   background: var(--accent);
   color: white;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
