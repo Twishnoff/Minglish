@@ -7,7 +7,7 @@ compatibility_date = "2024-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "pronunciation-tool-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "7f04f56a-5857-4e0b-b58d-4a848af73da6"
 
 # Non-secret config. ALLOWED_ORIGIN should be your GitHub Pages URL,
 # e.g. "https://yourusername.github.io" (no trailing slash), so the

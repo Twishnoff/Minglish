@@ -1,7 +1,7 @@
 // ---- Configuration -----------------------------------------------------
 // Set this to your deployed Worker's URL after `wrangler deploy`, e.g.
 // "https://pronunciation-tool.yourname.workers.dev". No trailing slash.
-const WORKER_URL = 'https://REPLACE_WITH_YOUR_WORKER_URL.workers.dev';
+const WORKER_URL = 'https://pronunciation-tool.tyler-wishnoff.workers.dev';
 
 const STORAGE_KEY = 'pronunciation-tool-email';
 
