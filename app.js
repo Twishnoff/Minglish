@@ -355,6 +355,23 @@ function applyAttemptResult(result) {
     showFeedback('pending', `Not quite (heard: "${result.recognizedText}", accuracy: ${acc}%) — try again.`);
   }
 
+  // TEMPORARY: surface Azure's raw response on-screen so it can be read
+  // directly off the phone while we're debugging the 0%-accuracy issue.
+  // No index.html changes needed -- this builds its own element.
+  if (result.debugRaw) {
+    let debugEl = document.getElementById('debug-raw');
+    if (!debugEl) {
+      debugEl = document.createElement('pre');
+      debugEl.id = 'debug-raw';
+      debugEl.style.cssText =
+        'white-space: pre-wrap; word-break: break-word; font-size: 11px; ' +
+        'background: #f3f4f6; border-radius: 8px; padding: 10px; margin-top: 12px; ' +
+        'max-height: 300px; overflow-y: auto; -webkit-user-select: text; user-select: text;';
+      el.attemptFeedback.insertAdjacentElement('afterend', debugEl);
+    }
+    debugEl.textContent = JSON.stringify(result.debugRaw, null, 2);
+  }
+
   // Refresh top-bar performance from the server so the percentage stays
   // authoritative (cheap call, keeps client/server in sync).
   refreshPerformanceOnly();
