@@ -1,0 +1,23 @@
+name = "pronunciation-tool"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Created by: wrangler d1 create pronunciation-tool-db
+# Paste the database_id it prints below.
+[[d1_databases]]
+binding = "DB"
+database_name = "pronunciation-tool-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# Non-secret config. ALLOWED_ORIGIN should be your GitHub Pages URL,
+# e.g. "https://yourusername.github.io" (no trailing slash), so the
+# browser is allowed to call this Worker via CORS. Leave as "*" while
+# testing locally if you'd rather not lock it down yet.
+[vars]
+ALLOWED_ORIGIN = "*"
+
+# Secrets (do NOT put these here -- set them with `wrangler secret put <NAME>`):
+#   ALLOWED_EMAILS      comma-separated, e.g. "you@gmail.com,test@gmail.com"
+#   ANTHROPIC_API_KEY   from console.anthropic.com
+#   AZURE_SPEECH_KEY    from your Azure AI Speech resource
+#   AZURE_SPEECH_REGION e.g. "eastus" -- must match the resource's region
