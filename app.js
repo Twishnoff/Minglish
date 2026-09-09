@@ -210,9 +210,23 @@ async function startRecording() {
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     };
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
-      submitAttempt(new Blob(recordedChunks, { type: recorder.mimeType }));
+      const rawBlob = new Blob(recordedChunks, { type: recorder.mimeType });
+      try {
+        // Different browsers hand MediaRecorder different default codecs
+        // (Chrome/Android: webm/opus, Safari/iOS: mp4/AAC) and Azure's
+        // speech endpoint doesn't reliably handle all of them -- on iOS in
+        // particular this was coming back as recognized text "." (i.e.
+        // nothing usable). Converting to a plain 16kHz mono WAV client-side
+        // sidesteps the whole issue by always sending a format Azure
+        // definitely supports, regardless of what the phone recorded in.
+        const wavBlob = await convertToWav(rawBlob);
+        submitAttempt(wavBlob);
+      } catch (err) {
+        console.error('Audio conversion failed:', err);
+        el.micStatus.textContent = "Couldn't process that recording -- try again.";
+      }
     };
     recorder.start();
     isRecording = true;
@@ -232,6 +246,67 @@ function stopRecording() {
   el.micStatus.textContent = 'Scoring your pronunciation…';
 }
 
+// Decodes whatever the browser recorded (webm/opus, mp4/aac, etc.) and
+// re-encodes it as 16kHz mono 16-bit PCM WAV -- the format Azure's speech
+// endpoint expects most reliably across every browser/OS combination.
+async function convertToWav(blob) {
+  const TARGET_SAMPLE_RATE = 16000;
+  const arrayBuffer = await blob.arrayBuffer();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const decodeCtx = new AudioCtx();
+  let audioBuffer;
+  try {
+    audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    decodeCtx.close();
+  }
+
+  const offlineCtx = new OfflineAudioContext(
+    1,
+    Math.ceil(audioBuffer.duration * TARGET_SAMPLE_RATE),
+    TARGET_SAMPLE_RATE
+  );
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  const rendered = await offlineCtx.startRendering();
+  const samples = rendered.getChannelData(0);
+
+  return encodeWav(samples, TARGET_SAMPLE_RATE);
+}
+
+function encodeWav(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);        // PCM chunk size
+  view.setUint16(20, 1, true);         // audio format: 1 = PCM
+  view.setUint16(22, 1, true);         // channels: mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate (sampleRate * blockAlign)
+  view.setUint16(32, 2, true);         // block align (channels * bytesPerSample)
+  view.setUint16(34, 16, true);        // bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav; codecs=audio/pcm; samplerate=16000' });
+}
+
 async function submitAttempt(blob) {
   const w = currentWord();
   const email = currentEmail();
@@ -242,7 +317,7 @@ async function submitAttempt(blob) {
         method: 'POST',
         headers: {
           'X-User-Email': email,
-          'Content-Type': blob.type || 'audio/webm',
+          'Content-Type': blob.type || 'audio/wav; codecs=audio/pcm; samplerate=16000',
         },
         body: blob,
       }
