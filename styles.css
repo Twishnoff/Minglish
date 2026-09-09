@@ -103,7 +103,18 @@ main {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 20px;
+  transition: background-color 0.2s ease;
 }
+
+/* Word status colors on the Speaking Practice box -- reflects the
+   currently displayed word's state for today (see app.js wordBoxClass).
+   White/default = untried or one failed try so far, still undecided.
+   Green = correct within the first 2 (scored) tries.
+   Yellow = eventually got it right, but only after being marked wrong.
+   Light red = wrong after 2 tries, not yet redeemed. */
+#practice-box.status-correct { background: #dcfce7; }
+#practice-box.status-late { background: #fef9c3; }
+#practice-box.status-incorrect { background: #fee2e2; }
 .card-header {
   display: flex;
   align-items: center;
@@ -161,8 +172,10 @@ main {
   border: none;
   background: var(--accent);
   color: white;
-  font-size: 1.8rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .mic-btn:hover { background: var(--accent-dark); }
 .mic-btn.recording {
@@ -186,6 +199,7 @@ main {
 .attempt-feedback.correct { background: #dcfce7; color: var(--green); }
 .attempt-feedback.incorrect { background: #fee2e2; color: var(--red); }
 .attempt-feedback.pending { background: #fef3c7; color: var(--orange); }
+.attempt-feedback.late { background: #fef9c3; color: #92730a; }
 
 .nav-arrows { display: flex; justify-content: space-between; margin-top: 16px; }
 .arrow-btn {

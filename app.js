@@ -24,6 +24,7 @@ const el = {
   streakValue: document.getElementById('streak-value'),
   performanceValue: document.getElementById('performance-value'),
 
+  practiceBox: document.getElementById('practice-box'),
   wordCounter: document.getElementById('word-counter'),
   wordDisplay: document.getElementById('word-display'),
   wordPopup: document.getElementById('word-popup'),
@@ -122,6 +123,22 @@ function currentWord() {
   return state.today.words[currentIndex];
 }
 
+// White/neutral = untried, or one failed try so far (still undecided).
+// Green = correct within the first 2 scored tries.
+// Yellow = eventually got it right, but only after being marked wrong.
+// Light red = wrong after 2 tries, not redeemed yet.
+function wordBoxClass(w) {
+  if (w.finalStatus === 'correct') return 'status-correct';
+  if (w.finalStatus === 'incorrect') return w.lateSuccess ? 'status-late' : 'status-incorrect';
+  return '';
+}
+
+function applyBoxClass(w) {
+  el.practiceBox.classList.remove('status-correct', 'status-late', 'status-incorrect');
+  const cls = wordBoxClass(w);
+  if (cls) el.practiceBox.classList.add(cls);
+}
+
 function renderWord() {
   const words = state.today.words;
   el.wordPopup.hidden = true;
@@ -134,6 +151,7 @@ function renderWord() {
     el.micBtn.disabled = true;
     el.prevBtn.disabled = true;
     el.nextBtn.disabled = true;
+    el.practiceBox.classList.remove('status-correct', 'status-late', 'status-incorrect');
     return;
   }
 
@@ -146,10 +164,17 @@ function renderWord() {
   el.prevBtn.disabled = currentIndex === 0;
   el.nextBtn.disabled = currentIndex === words.length - 1;
 
+  applyBoxClass(w);
+
   if (w.finalStatus === 'correct') {
     showFeedback('correct', 'Marked correct for today.');
   } else if (w.finalStatus === 'incorrect') {
-    showFeedback('incorrect', "Marked incorrect for today — you can keep practicing this one.");
+    showFeedback(
+      w.lateSuccess ? 'late' : 'incorrect',
+      w.lateSuccess
+        ? 'Marked incorrect for today\'s score, but you eventually got it right — nice work.'
+        : "Marked incorrect for today — you can keep practicing this one."
+    );
   }
 }
 
@@ -185,6 +210,42 @@ el.nextBtn.addEventListener('click', () => {
     renderWord();
   }
 });
+
+// ---- Swipe navigation (mobile) ---------------------------------------------
+// Left swipe -> next word, right swipe -> previous word. Reuses the same
+// arrow buttons' click handlers so the enabled/disabled-at-the-ends logic
+// only lives in one place.
+(function setUpSwipeNav() {
+  let startX = 0;
+  let startY = 0;
+
+  el.practiceBox.addEventListener(
+    'touchstart',
+    (e) => {
+      startX = e.changedTouches[0].screenX;
+      startY = e.changedTouches[0].screenY;
+    },
+    { passive: true }
+  );
+
+  el.practiceBox.addEventListener(
+    'touchend',
+    (e) => {
+      const dx = e.changedTouches[0].screenX - startX;
+      const dy = e.changedTouches[0].screenY - startY;
+      const SWIPE_THRESHOLD = 50;
+      // Require a mostly-horizontal gesture so vertical scrolling (or a
+      // simple tap on the mic/word/arrows) doesn't get mistaken for a swipe.
+      if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
+      if (dx < 0 && !el.nextBtn.disabled) {
+        el.nextBtn.click();
+      } else if (dx > 0 && !el.prevBtn.disabled) {
+        el.prevBtn.click();
+      }
+    },
+    { passive: true }
+  );
+})();
 
 function showFeedback(kind, message) {
   el.attemptFeedback.hidden = false;
@@ -334,22 +395,28 @@ async function submitAttempt(blob) {
 }
 
 function applyAttemptResult(result) {
-  el.micStatus.textContent = 'Tap the mic and say the word or phrase above.';
+  el.micStatus.textContent = 'Tap the mic to begin speaking the word. Tap again when finished to submit.';
 
   // Update local word state so re-rendering reflects tries/finalStatus
   // without a full reload.
   const w = currentWord();
   w.tries = result.tries;
   if (result.finalStatus) w.finalStatus = result.finalStatus;
+  if (typeof result.lateSuccess === 'boolean') w.lateSuccess = result.lateSuccess;
+  applyBoxClass(w);
 
   const acc = Math.round(result.accuracyScore ?? 0);
 
   if (result.finalStatus === 'correct') {
     showFeedback('correct', `Nice — that counted as correct (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
+  } else if (result.finalStatus === 'incorrect' && result.passed) {
+    // Locked in wrong for today, but they just proved they can say it --
+    // today's tally doesn't change, but it won't come back tomorrow either.
+    showFeedback('late', `That one sounded right (heard: "${result.recognizedText}", accuracy: ${acc}%) — won't change today's score, but nice work getting there.`);
   } else if (result.finalStatus === 'incorrect') {
     showFeedback('incorrect', `Marked incorrect for today (heard: "${result.recognizedText}", accuracy: ${acc}%). Keep practicing — it'll come back tomorrow.`);
   } else if (result.passed) {
-    // Passed a free retry on an already-decided word.
+    // Passed a free retry on an already-correct word.
     showFeedback('correct', `That one sounded right (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
   } else {
     showFeedback('pending', `Not quite (heard: "${result.recognizedText}", accuracy: ${acc}%) — try again.`);
