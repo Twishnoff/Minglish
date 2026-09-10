@@ -385,7 +385,7 @@ async function convertToWav(blob) {
   source.connect(offlineCtx.destination);
   source.start(0);
   const rendered = await offlineCtx.startRendering();
-  const samples = trimSilence(rendered.getChannelData(0), TARGET_SAMPLE_RATE);
+  const samples = rendered.getChannelData(0);
 
   return encodeWav(samples, TARGET_SAMPLE_RATE);
 }
