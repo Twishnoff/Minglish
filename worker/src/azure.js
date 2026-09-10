@@ -13,12 +13,13 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
   const region = env.AZURE_SPEECH_REGION;
   const key = env.AZURE_SPEECH_KEY;
 
-  const pronAssessmentConfig = {
+    const pronAssessmentConfig = {
     ReferenceText: referenceText,
     GradingSystem: 'HundredMark',
-    Granularity: 'Phoneme',
+    Granularity: 'Word',
     Dimension: 'Comprehensive',
     EnableMiscue: true,
+    EnableProsodyAssessment: 'True',
   };
   const pronAssessmentHeader = btoa(JSON.stringify(pronAssessmentConfig));
 
