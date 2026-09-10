@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS daily_log (
 CREATE INDEX IF NOT EXISTS idx_daily_log_user_date
   ON daily_log (user_email, date);
 
+-- Belt-and-suspenders against the check-then-insert race in
+-- getOrCreateTodayWords (src/db.js): two /api/state calls landing close
+-- together (a reload while the first is still in flight, a retried
+-- request, a second tab) can both see "no rows yet for today" and both try
+-- to create a full day's set. UNIQUE(user_email, date, word_id) above
+-- doesn't stop that -- the two sets are usually different words, so no
+-- word_id collides -- but this index does, since both sets independently
+-- assign order_index 0..N-1. Whichever insert loses the race gets a
+-- constraint-violation error, which the code catches and treats as "someone
+-- else already created it" (see db.js).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_log_user_date_order
+  ON daily_log (user_email, date, order_index);
+
 -- One row per (user, calendar day) the user opened the app. Used to compute
 -- the login streak (consecutive Pacific-time calendar days, no gaps).
 CREATE TABLE IF NOT EXISTS login_days (
