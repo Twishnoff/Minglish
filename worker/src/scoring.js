@@ -85,14 +85,10 @@ function respond(azureResult, passed, tries, finalStatus, lateSuccess) {
     tries,
     finalStatus,
     lateSuccess: !!lateSuccess,
+    // Not shown in the UI (per the "accuracy only, no 'heard' text" request)
+    // but kept in the payload -- useful for spot-checking recognition via
+    // the Network tab without needing a redeploy.
     recognized: azureResult.recognized,
     recognizedText: azureResult.recognizedText,
-    debugRecognitionStatus: azureResult.debugRecognitionStatus,
-    debugBestPronunciationAssessment: azureResult.debugBestPronunciationAssessment,
-    debugWordCount: azureResult.debugWordCount,
-    debugFirstWordPA: azureResult.debugFirstWordPA,
-    debugRawTopLevelKeys: azureResult.debugRawTopLevelKeys,
-    debugRawNBestKeys: azureResult.debugRawNBestKeys,
-    debugRawData: azureResult.debugRawData,
   };
 }

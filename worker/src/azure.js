@@ -13,10 +13,10 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
   const region = env.AZURE_SPEECH_REGION;
   const key = env.AZURE_SPEECH_KEY;
 
-    const pronAssessmentConfig = {
+  const pronAssessmentConfig = {
     ReferenceText: referenceText,
     GradingSystem: 'HundredMark',
-    Granularity: 'Word',
+    Granularity: 'Phoneme',
     Dimension: 'Comprehensive',
     EnableMiscue: true,
     EnableProsodyAssessment: 'True',
@@ -69,18 +69,6 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
     accuracyScore,
     mispronouncedRanges,
     raw: data, // kept for debugging/logging; not persisted to D1
-    // TEMP DEBUG -- remove once the accuracyScore-always-0 issue is sorted.
-    debugRecognitionStatus: data.RecognitionStatus ?? null,
-    debugBestPronunciationAssessment: best?.PronunciationAssessment ?? null,
-    debugWordCount: (best?.Words || []).length,
-    debugFirstWordPA: best?.Words?.[0]?.PronunciationAssessment ?? null,
-    // Full raw Azure response, unfiltered -- so we can see EVERY top-level
-    // and NBest-level key Azure actually sent back, in case the assessment
-    // data (or an explanation for its absence) is sitting under a key we
-    // aren't already inspecting above.
-    debugRawTopLevelKeys: Object.keys(data),
-    debugRawNBestKeys: best ? Object.keys(best) : null,
-    debugRawData: data,
   };
 }
 
