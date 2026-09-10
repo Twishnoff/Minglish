@@ -85,5 +85,7 @@ function respond(azureResult, passed, tries, finalStatus, lateSuccess) {
     tries,
     finalStatus,
     lateSuccess: !!lateSuccess,
+    recognized: azureResult.recognized,
+    recognizedText: azureResult.recognizedText,
   };
 }
