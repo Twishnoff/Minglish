@@ -39,7 +39,7 @@ body {
   width: 100%;
   text-align: center;
 }
-.login-logo { display: block; margin: 0 auto 16px; height: 72px; width: auto; }
+.login-logo { display: block; margin: 0 auto 16px; height: 160px; width: auto; }
 .login-card h1 { font-size: 1.4rem; margin-bottom: 4px; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 #login-form { display: flex; gap: 8px; margin-top: 20px; }
@@ -71,14 +71,22 @@ body {
   align-items: center;
   gap: 24px;
   padding: 14px 20px;
+  min-height: 88px;
   background: var(--card-bg);
   border-bottom: 1px solid var(--border);
 }
 .top-bar-item { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; }
 .top-bar-label { color: var(--muted); }
 .top-bar-value { font-weight: 700; }
-.top-bar-logo { flex: 1; display: flex; align-items: center; justify-content: center; }
-.top-bar-logo img { height: 32px; width: auto; }
+.top-bar-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+}
+.top-bar-logo img { height: 64px; width: auto; }
 #performance-value.perf-green { color: var(--green); }
 #performance-value.perf-orange { color: var(--orange); }
 #performance-value.perf-red { color: var(--red); }
