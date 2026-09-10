@@ -50,7 +50,17 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
   // this is our first pass ("is this even the right word").
   const recognized = data.RecognitionStatus === 'Success';
   const best = (data.NBest && data.NBest[0]) || null;
-  const accuracyScore = best?.PronunciationAssessment?.AccuracyScore ?? 0;
+  // NOTE: the score fields come back FLAT on the NBest entry (AccuracyScore,
+  // FluencyScore, ProsodyScore, CompletenessScore, PronScore), not nested
+  // under a "PronunciationAssessment" object. That nested shape is an SDK
+  // abstraction (Speech SDK's PronunciationAssessmentResult) that doesn't
+  // exist in the raw REST JSON we get here -- reading
+  // best?.PronunciationAssessment?.AccuracyScore was silently always
+  // undefined, which is the actual root cause of accuracyScore always
+  // showing 0 (recognition was working fine the whole time; we were just
+  // looking at the wrong path in a JSON object that *looked* like it should
+  // have that nesting based on Microsoft's SDK-oriented docs).
+  const accuracyScore = best?.AccuracyScore ?? 0;
   const mispronouncedRanges = buildMispronunciationRanges(referenceText, best?.Words || []);
 
   return {
@@ -64,6 +74,13 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
     debugBestPronunciationAssessment: best?.PronunciationAssessment ?? null,
     debugWordCount: (best?.Words || []).length,
     debugFirstWordPA: best?.Words?.[0]?.PronunciationAssessment ?? null,
+    // Full raw Azure response, unfiltered -- so we can see EVERY top-level
+    // and NBest-level key Azure actually sent back, in case the assessment
+    // data (or an explanation for its absence) is sitting under a key we
+    // aren't already inspecting above.
+    debugRawTopLevelKeys: Object.keys(data),
+    debugRawNBestKeys: best ? Object.keys(best) : null,
+    debugRawData: data,
   };
 }
 
@@ -108,8 +125,10 @@ function buildMispronunciationRanges(referenceText, azureWords) {
   for (let i = 0; i < n; i++) {
     const token = tokens[i];
     const aw = azureWords[i];
-    const wordScore = aw?.PronunciationAssessment?.AccuracyScore;
-    const errorType = aw?.PronunciationAssessment?.ErrorType;
+    // Same flat-vs-nested fix as above: these are direct properties of the
+    // word entry, not nested under a "PronunciationAssessment" object.
+    const wordScore = aw?.AccuracyScore;
+    const errorType = aw?.ErrorType;
     const phonemes = aw?.Phonemes || [];
 
     // Whole word reads as trouble (omitted entirely, or Azure gave no
@@ -125,7 +144,7 @@ function buildMispronunciationRanges(referenceText, azureWords) {
     const step = letters / phonemes.length;
     let open = null;
     phonemes.forEach((p, idx) => {
-      const score = p?.PronunciationAssessment?.AccuracyScore;
+      const score = p?.AccuracyScore; // flat, same fix as above
       const segStart = token.start + Math.round(idx * step);
       const segEnd = token.start + Math.round((idx + 1) * step);
       const bad = typeof score === 'number' && score < CONFIG.MISPRONUNCIATION_HIGHLIGHT_THRESHOLD;

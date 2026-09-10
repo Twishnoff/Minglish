@@ -91,5 +91,8 @@ function respond(azureResult, passed, tries, finalStatus, lateSuccess) {
     debugBestPronunciationAssessment: azureResult.debugBestPronunciationAssessment,
     debugWordCount: azureResult.debugWordCount,
     debugFirstWordPA: azureResult.debugFirstWordPA,
+    debugRawTopLevelKeys: azureResult.debugRawTopLevelKeys,
+    debugRawNBestKeys: azureResult.debugRawNBestKeys,
+    debugRawData: azureResult.debugRawData,
   };
 }
