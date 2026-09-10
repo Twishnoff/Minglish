@@ -147,10 +147,30 @@ export async function getOrCreateTodayWords(db, email, today) {
   const insertStmt = db.prepare(
     'INSERT INTO daily_log (user_email, date, word_id, order_index, tries, final_status) VALUES (?, ?, ?, ?, 0, NULL)'
   );
-  await db.batch(chosen.map((w, i) => insertStmt.bind(email, today, w.id, i)));
+  try {
+    await db.batch(chosen.map((w, i) => insertStmt.bind(email, today, w.id, i)));
+  } catch (err) {
+    // The existing.length check above and this insert aren't atomic --
+    // two /api/state calls landing close together (a reload while the
+    // first request is still in flight, a retried request, a second tab)
+    // can both see "nothing for today yet" and both get here. The
+    // idx_daily_log_user_date_order unique index (schema.sql / migration
+    // 0002) means whichever insert loses that race fails with a
+    // constraint-violation error rather than silently creating a second,
+    // overlapping set of 20 words. That's expected and fine here: someone
+    // else already created today's set, so just fall through and re-query
+    // for it below. Anything else (a real DB error) still needs to surface,
+    // but D1/SQLite doesn't give us a typed error to distinguish that
+    // cleanly, so we check the message for the constraint name instead.
+    if (!/UNIQUE constraint failed.*idx_daily_log_user_date_order/i.test(err.message || '')) {
+      throw err;
+    }
+  }
 
   // Re-query rather than trying to thread D1's per-statement insert ids
-  // back through the batch -- simpler and just as cheap at this size.
+  // back through the batch -- simpler and just as cheap at this size, and
+  // also what recovers the winning set for the losing side of the race
+  // above.
   const { results: created } = await db
     .prepare(
       `SELECT dl.id as logId, dl.word_id as wordId, dl.order_index as orderIndex,
