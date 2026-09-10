@@ -87,5 +87,6 @@ function respond(azureResult, passed, tries, finalStatus, lateSuccess) {
     lateSuccess: !!lateSuccess,
     recognized: azureResult.recognized,
     recognizedText: azureResult.recognizedText,
+    debugMarker: 'TEST123',
   };
 }
