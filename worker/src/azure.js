@@ -58,6 +58,11 @@ export async function assessPronunciation(env, audioBuffer, referenceText, conte
     accuracyScore,
     mispronouncedRanges,
     raw: data, // kept for debugging/logging; not persisted to D1
+    // TEMP DEBUG -- remove once the accuracyScore-always-0 issue is sorted.
+    debugRecognitionStatus: data.RecognitionStatus ?? null,
+    debugBestPronunciationAssessment: best?.PronunciationAssessment ?? null,
+    debugWordCount: (best?.Words || []).length,
+    debugFirstWordPA: best?.Words?.[0]?.PronunciationAssessment ?? null,
   };
 }
 
