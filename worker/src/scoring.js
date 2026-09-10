@@ -5,6 +5,7 @@ import {
   incrementTries,
   lockFinalStatus,
   updateWordPoolStatus,
+  markLateSuccess,
 } from './db.js';
 
 // Two independent pass criteria, both required (see README for the
@@ -47,33 +48,42 @@ export async function handleAttempt(env, db, { email, today, wordId, audioBuffer
     if (passed) {
       await lockFinalStatus(db, logRow.id, 'correct');
       await updateWordPoolStatus(db, wordId, 'passed', today);
-      return respond(azureResult, passed, newTries, 'correct');
+      return respond(azureResult, passed, newTries, 'correct', logRow.late_success);
     }
 
     if (newTries >= CONFIG.MAX_SCORED_TRIES) {
       await lockFinalStatus(db, logRow.id, 'incorrect');
       await updateWordPoolStatus(db, wordId, 'failed', today);
-      return respond(azureResult, passed, newTries, 'incorrect');
+      return respond(azureResult, passed, newTries, 'incorrect', logRow.late_success);
     }
 
     // Still undecided -- one more scored try available.
-    return respond(azureResult, passed, newTries, null);
+    return respond(azureResult, passed, newTries, null, logRow.late_success);
   }
 
   // Already decided for today. Free retry: don't touch tries/final_status,
-  // but a late pass still updates the pool for tomorrow's scheduling.
+  // but a late pass still updates the pool for tomorrow's scheduling, and
+  // -- if today's outcome was locked in 'incorrect' -- flips the sticky
+  // late_success flag so the UI can show "eventually got it" instead of
+  // "still wrong" without moving today's score.
+  let lateSuccess = !!logRow.late_success;
   if (passed) {
     await updateWordPoolStatus(db, wordId, 'passed', today);
+    if (logRow.final_status === 'incorrect' && !lateSuccess) {
+      await markLateSuccess(db, logRow.id);
+      lateSuccess = true;
+    }
   }
-  return respond(azureResult, passed, logRow.tries, logRow.final_status);
+  return respond(azureResult, passed, logRow.tries, logRow.final_status, lateSuccess);
 }
 
-function respond(azureResult, passed, tries, finalStatus) {
+function respond(azureResult, passed, tries, finalStatus, lateSuccess) {
   return {
     passed,
-    recognizedText: azureResult.recognizedText,
     accuracyScore: azureResult.accuracyScore,
+    mispronouncedRanges: azureResult.mispronouncedRanges || [],
     tries,
     finalStatus,
+    lateSuccess: !!lateSuccess,
   };
 }

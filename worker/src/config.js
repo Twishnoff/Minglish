@@ -33,6 +33,19 @@ export const CONFIG = {
   //   2) The phoneme-level AccuracyScore must clear this bar.
   MIN_ACCURACY_SCORE: 80,
 
+  // Diagnostic bar (separate from MIN_ACCURACY_SCORE above) used only to
+  // decide which specific phonemes get underlined as "needs work" in the
+  // UI -- see buildMispronunciationRanges in azure.js. Lower than the pass
+  // bar on purpose: this is meant to surface the roughest spots within an
+  // attempt, including ones that still passed overall.
+  MISPRONUNCIATION_HIGHLIGHT_THRESHOLD: 60,
+
+  // Azure Neural TTS voice used for the speaker button (falls back to the
+  // browser's built-in speech synthesis if this fails/is unavailable). Any
+  // Neural voice from Azure's voice gallery works here; this one was
+  // chosen for clear, natural General American pronunciation.
+  TTS_VOICE: 'en-US-AvaNeural',
+
   // Claude model used to generate the word/phrase list + Mandarin
   // translations. Update this to whatever the current cheap/fast model
   // is at deploy time -- this is a placeholder, verify it's still valid.

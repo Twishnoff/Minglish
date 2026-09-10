@@ -8,6 +8,8 @@ import {
   getHistory,
 } from './db.js';
 import { handleAttempt } from './scoring.js';
+import { synthesizeSpeech } from './azure.js';
+import { generateDetailsForExisting } from './claude.js';
 
 function corsHeaders(env) {
   return {
@@ -70,7 +72,7 @@ export default {
         await ensurePoolTopped(env, db, email, today);
         const words = await getOrCreateTodayWords(db, email, today);
         const { correct, total } = await getTodayPerformance(db, email, today);
-        const history = await getHistory(db, email);
+        const history = await getHistory(db, email, today);
 
         return json(env, {
           streak,
@@ -84,9 +86,12 @@ export default {
               wordId: w.wordId,
               text: w.text,
               mandarin: w.mandarin,
+              ipa: w.ipa || '',
+              example: w.example || '',
               orderIndex: w.orderIndex,
               tries: w.tries,
               finalStatus: w.finalStatus,
+              lateSuccess: !!w.lateSuccess,
             })),
           },
           history,
@@ -119,6 +124,67 @@ export default {
           referenceText,
         });
         return json(env, result);
+      }
+
+      // --- GET /api/tts?text=... -- Azure Neural TTS playback, proxied so
+      // the Azure key never reaches the browser. Returns raw MP3 bytes;
+      // frontend falls back to the browser's own speech synthesis if this
+      // errors. Gated behind the same allowlist check as everything else.
+      if (url.pathname === '/api/tts' && request.method === 'GET') {
+        const text = (url.searchParams.get('text') || '').trim();
+        if (!text) return json(env, { error: 'text is required.' }, 400);
+        try {
+          const audio = await synthesizeSpeech(env, text);
+          return new Response(audio, {
+            headers: {
+              'Content-Type': 'audio/mpeg',
+              'Cache-Control': 'public, max-age=86400',
+              ...corsHeaders(env),
+            },
+          });
+        } catch (err) {
+          console.error('TTS failed:', err);
+          return json(env, { error: 'TTS unavailable.' }, 502);
+        }
+      }
+
+      // --- POST /api/admin/backfill-details -- one-time (or run-until-done)
+      // maintenance route: fills in ipa/example for word_pool rows created
+      // before those columns existed. Same allowlist gate as every other
+      // route (there's no separate admin role in this two-person tool -- see
+      // README). Processes one batch per call so it stays well within a
+      // Worker's CPU/time limits; call repeatedly until `remaining` is 0.
+      if (url.pathname === '/api/admin/backfill-details' && request.method === 'POST') {
+        const BATCH_SIZE = 20;
+        const { results: rows } = await db
+          .prepare(
+            `SELECT id, text FROM word_pool
+             WHERE user_email = ? AND (ipa IS NULL OR ipa = '' OR example IS NULL OR example = '')
+             LIMIT ?`
+          )
+          .bind(email, BATCH_SIZE)
+          .all();
+
+        if (rows.length === 0) {
+          return json(env, { updated: 0, remaining: 0 });
+        }
+
+        const details = await generateDetailsForExisting(env, rows.map((r) => r.text));
+        const stmt = db.prepare('UPDATE word_pool SET ipa = ?, example = ? WHERE id = ?');
+        const updates = rows
+          .map((row, i) => (details[i] ? stmt.bind(details[i].ipa, details[i].example, row.id) : null))
+          .filter(Boolean);
+        if (updates.length) await db.batch(updates);
+
+        const { results: remainingRows } = await db
+          .prepare(
+            `SELECT COUNT(*) as n FROM word_pool
+             WHERE user_email = ? AND (ipa IS NULL OR ipa = '' OR example IS NULL OR example = '')`
+          )
+          .bind(email)
+          .all();
+
+        return json(env, { updated: updates.length, remaining: remainingRows[0]?.n ?? 0 });
       }
 
       return json(env, { error: 'Not found.' }, 404);

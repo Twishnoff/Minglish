@@ -25,3 +25,13 @@ export function subtractDays(dateStr, days) {
 export function isOnOrBefore(dateStr, otherDateStr) {
   return dateStr <= otherDateStr; // YYYY-MM-DD strings sort lexicographically
 }
+
+// Adds `days` calendar days to a YYYY-MM-DD string and returns a new
+// YYYY-MM-DD string. Same UTC-noon approach as subtractDays, for the same
+// DST-safety reason.
+export function addDays(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}

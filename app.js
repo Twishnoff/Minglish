@@ -27,11 +27,11 @@ const el = {
   practiceBox: document.getElementById('practice-box'),
   wordCounter: document.getElementById('word-counter'),
   wordDisplay: document.getElementById('word-display'),
+  wordIpa: document.getElementById('word-ipa'),
+  speakBtn: document.getElementById('speak-btn'),
   wordPopup: document.getElementById('word-popup'),
-  popupSpeak: document.getElementById('popup-speak'),
-  popupTranslate: document.getElementById('popup-translate'),
+  popupMandarin: document.getElementById('popup-mandarin'),
   popupClose: document.getElementById('popup-close'),
-  mandarinText: document.getElementById('mandarin-text'),
 
   micBtn: document.getElementById('mic-btn'),
   micStatus: document.getElementById('mic-status'),
@@ -39,12 +39,14 @@ const el = {
 
   prevBtn: document.getElementById('prev-btn'),
   nextBtn: document.getElementById('next-btn'),
+  exampleSentence: document.getElementById('example-sentence'),
 
   chartCanvas: document.getElementById('performance-chart'),
   chartEmpty: document.getElementById('chart-empty'),
 };
 
 let chartInstance = null;
+let ttsAudio = null; // currently-playing Azure TTS <audio>, if any
 
 // ---- Login / logout --------------------------------------------------------
 
@@ -143,11 +145,12 @@ function applyBoxClass(w) {
 function renderWord() {
   const words = state.today.words;
   el.wordPopup.hidden = true;
-  el.mandarinText.hidden = true;
   el.attemptFeedback.hidden = true;
 
   if (!words || words.length === 0) {
-    el.wordDisplay.textContent = 'No words available today.';
+    setWordDisplayText('No words available today.');
+    el.wordIpa.textContent = '';
+    el.exampleSentence.textContent = '';
     el.wordCounter.textContent = '0/0';
     el.micBtn.disabled = true;
     el.prevBtn.disabled = true;
@@ -157,8 +160,10 @@ function renderWord() {
   }
 
   const w = words[currentIndex];
-  el.wordDisplay.textContent = w.text;
-  el.mandarinText.textContent = w.mandarin;
+  setWordDisplayText(w.text);
+  el.wordIpa.textContent = w.ipa || '';
+  el.popupMandarin.textContent = w.mandarin;
+  el.exampleSentence.textContent = w.example || '';
   el.wordCounter.textContent = `${currentIndex + 1}/${words.length}`;
   el.micBtn.disabled = false;
 
@@ -179,24 +184,71 @@ function renderWord() {
   }
 }
 
-el.wordDisplay.addEventListener('click', () => {
+// Sets the practice word's plain text, clearing any mispronunciation
+// underline left over from a previous attempt (see renderMispronunciation).
+function setWordDisplayText(text) {
+  el.wordDisplay.textContent = text;
+}
+
+// Popup now shows just the Mandarin translation + a close button (per the
+// Sept 2026 feature-request doc). It opens on a word click, and closes on
+// its own close button OR a click/tap anywhere else on the page.
+el.wordDisplay.addEventListener('click', (e) => {
+  e.stopPropagation();
   el.wordPopup.hidden = !el.wordPopup.hidden;
 });
 
-el.popupSpeak.addEventListener('click', () => {
-  const utter = new SpeechSynthesisUtterance(currentWord().text);
+el.popupClose.addEventListener('click', (e) => {
+  e.stopPropagation();
+  el.wordPopup.hidden = true;
+});
+
+// Stop clicks inside the popup itself from bubbling to the document-level
+// "close on any click" handler below (otherwise the popup could never be
+// interacted with -- every click on it would immediately close it).
+el.wordPopup.addEventListener('click', (e) => {
+  e.stopPropagation();
+});
+
+document.addEventListener('click', () => {
+  if (!el.wordPopup.hidden) el.wordPopup.hidden = true;
+});
+
+// ---- Speak button (Azure Neural TTS, falls back to the browser's voice) ---
+
+el.speakBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const text = currentWord().text;
+  try {
+    await playAzureTts(text);
+  } catch (err) {
+    console.error('Azure TTS failed, falling back to browser voice:', err);
+    speakWithBrowserVoice(text);
+  }
+});
+
+function speakWithBrowserVoice(text) {
+  const utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'en-US';
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utter);
-});
+}
 
-el.popupTranslate.addEventListener('click', () => {
-  el.mandarinText.hidden = !el.mandarinText.hidden;
-});
-
-el.popupClose.addEventListener('click', () => {
-  el.wordPopup.hidden = true;
-});
+async function playAzureTts(text) {
+  const email = currentEmail();
+  const resp = await fetch(`${WORKER_URL}/api/tts?text=${encodeURIComponent(text)}`, {
+    headers: { 'X-User-Email': email },
+  });
+  if (!resp.ok) throw new Error('TTS request failed');
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  if (ttsAudio) {
+    ttsAudio.pause();
+    URL.revokeObjectURL(ttsAudio.src);
+  }
+  ttsAudio = new Audio(url);
+  await ttsAudio.play();
+}
 
 el.prevBtn.addEventListener('click', () => {
   if (currentIndex > 0) {
@@ -333,9 +385,35 @@ async function convertToWav(blob) {
   source.connect(offlineCtx.destination);
   source.start(0);
   const rendered = await offlineCtx.startRendering();
-  const samples = rendered.getChannelData(0);
+  const samples = trimSilence(rendered.getChannelData(0), TARGET_SAMPLE_RATE);
 
   return encodeWav(samples, TARGET_SAMPLE_RATE);
+}
+
+// Trims leading/trailing near-silence so we upload (and Azure has to
+// process) only the part of the recording that actually has speech in it --
+// shaves noticeable time off scoring for recordings with dead air at the
+// start/end, which tap-to-start/tap-to-stop recording produces a lot of.
+// Keeps a small padding buffer on each side so the word itself never gets
+// clipped.
+function trimSilence(samples, sampleRate) {
+  const SILENCE_THRESHOLD = 0.015; // amplitude below this counts as silence
+  const PADDING_MS = 150;
+  const padding = Math.round((PADDING_MS / 1000) * sampleRate);
+
+  let start = 0;
+  while (start < samples.length && Math.abs(samples[start]) < SILENCE_THRESHOLD) start++;
+  let end = samples.length - 1;
+  while (end > start && Math.abs(samples[end]) < SILENCE_THRESHOLD) end--;
+
+  // Recording was entirely (near-)silent -- send it through untouched
+  // rather than trimming it to nothing, so Azure still returns a real
+  // (failing) result instead of us fabricating one.
+  if (end <= start) return samples;
+
+  const trimmedStart = Math.max(0, start - padding);
+  const trimmedEnd = Math.min(samples.length, end + padding);
+  return samples.subarray(trimmedStart, trimmedEnd);
 }
 
 function encodeWav(samples, sampleRate) {
@@ -406,21 +484,24 @@ function applyAttemptResult(result) {
   if (typeof result.lateSuccess === 'boolean') w.lateSuccess = result.lateSuccess;
   applyBoxClass(w);
 
+  renderMispronunciation(w.text, result.mispronouncedRanges || []);
+
   const acc = Math.round(result.accuracyScore ?? 0);
+  const accLine = `Your pronunciation accuracy - ${acc}%.`;
 
   if (result.finalStatus === 'correct') {
-    showFeedback('correct', `Nice — that counted as correct (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
+    showFeedback('correct', `${accLine} Marked correct for today.`);
   } else if (result.finalStatus === 'incorrect' && result.passed) {
     // Locked in wrong for today, but they just proved they can say it --
     // today's tally doesn't change, but it won't come back tomorrow either.
-    showFeedback('late', `That one sounded right (heard: "${result.recognizedText}", accuracy: ${acc}%) — won't change today's score, but nice work getting there.`);
+    showFeedback('late', `${accLine} Won't change today's score, but nice work getting there.`);
   } else if (result.finalStatus === 'incorrect') {
-    showFeedback('incorrect', `Marked incorrect for today (heard: "${result.recognizedText}", accuracy: ${acc}%). Keep practicing — it'll come back tomorrow.`);
+    showFeedback('incorrect', `${accLine} Marked incorrect for today — keep practicing, it'll come back tomorrow.`);
   } else if (result.passed) {
     // Passed a free retry on an already-correct word.
-    showFeedback('correct', `That one sounded right (heard: "${result.recognizedText}", accuracy: ${acc}%).`);
+    showFeedback('correct', `${accLine} That one sounded right.`);
   } else {
-    showFeedback('pending', `Not quite (heard: "${result.recognizedText}", accuracy: ${acc}%) — try again.`);
+    showFeedback('pending', `${accLine} Not quite — try again.`);
   }
 
   // Refresh top-bar performance from the server so the percentage stays
@@ -434,6 +515,34 @@ function applyAttemptResult(result) {
       renderWord();
     }, 1200);
   }
+}
+
+// Redraws the practice word with the letters Azure's pronunciation
+// assessment scored lowest on (per the most recent attempt) underlined in
+// deep red -- see azure.js buildMispronunciationRanges on the backend for
+// how those ranges are derived (word-level is exact; sub-word placement
+// within a word is a heuristic approximation).
+function renderMispronunciation(text, ranges) {
+  if (!ranges || ranges.length === 0) {
+    setWordDisplayText(text);
+    return;
+  }
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  el.wordDisplay.textContent = '';
+  let cursor = 0;
+  for (const r of sorted) {
+    const start = Math.max(cursor, Math.min(r.start, text.length));
+    const end = Math.max(start, Math.min(r.end, text.length));
+    if (start > cursor) el.wordDisplay.appendChild(document.createTextNode(text.slice(cursor, start)));
+    if (end > start) {
+      const span = document.createElement('span');
+      span.className = 'mispronounced';
+      span.textContent = text.slice(start, end);
+      el.wordDisplay.appendChild(span);
+    }
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < text.length) el.wordDisplay.appendChild(document.createTextNode(text.slice(cursor)));
 }
 
 async function refreshPerformanceOnly() {

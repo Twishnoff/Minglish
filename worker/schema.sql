@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS word_pool (
   user_email TEXT NOT NULL,
   text TEXT NOT NULL,             -- the English word or phrase, e.g. "Bill of Lading"
   mandarin TEXT NOT NULL,         -- precomputed Simplified Chinese translation
+  ipa TEXT,                       -- precomputed IPA phonetic transcription, e.g. "/ˈbɪl ʌv ˈleɪdɪŋ/"
+  example TEXT,                   -- precomputed example sentence using the word/phrase
   status TEXT NOT NULL DEFAULT 'untested', -- 'untested' | 'passed' | 'failed'
   last_result_date TEXT,          -- Pacific-time YYYY-MM-DD of the most recent pass/fail
   created_date TEXT NOT NULL,     -- Pacific-time YYYY-MM-DD when this entry was generated
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS daily_log (
   order_index INTEGER NOT NULL,   -- 0-9, preserves left/right arrow order
   tries INTEGER NOT NULL DEFAULT 0,
   final_status TEXT,              -- NULL | 'correct' | 'incorrect'
+  late_success INTEGER NOT NULL DEFAULT 0, -- 1 if locked 'incorrect' but later passed a free retry
   UNIQUE(user_email, date, word_id)
 );
 
