@@ -607,13 +607,10 @@ function applyAttemptResult(result, word) {
   // authoritative (cheap call, keeps client/server in sync).
   refreshPerformanceOnly();
 
-  // Auto-advance only when a word is *newly* decided as correct.
-  if (result.finalStatus === 'correct' && currentIndex < state.today.words.length - 1) {
-    setTimeout(() => {
-      currentIndex += 1;
-      renderWord();
-    }, 1200);
-  }
+  // Deliberately no auto-advance on a correct answer: the user stays on the
+  // word so they can replay the attempt, hear the reference pronunciation,
+  // or just say it again. Moving on is always an explicit arrow press or
+  // swipe.
 }
 
 // Redraws the practice word with the letters Azure's pronunciation

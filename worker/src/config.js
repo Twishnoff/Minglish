@@ -7,7 +7,7 @@ export const CONFIG = {
   TIMEZONE: 'America/Los_Angeles',
 
   // How many words/phrases make up a day's practice set.
-  DAILY_WORD_COUNT: 10,
+  DAILY_WORD_COUNT: 20,
 
   // A word that's answered correctly isn't shown again until this many
   // days have passed.
@@ -23,8 +23,18 @@ export const CONFIG = {
   // in a user's word_pool. Topped up with fresh Claude-generated
   // words/phrases when the pool of *eligible* (untested/failed/
   // cooldown-expired) words runs low.
+  // Soft *floor*, not a cap: top-ups add words whenever eligible words run
+  // low, so the pool grows past this on its own. At 20 words/day with a
+  // 7-day cooldown the rotation needs ~140 words in circulation, and it
+  // gets there 20-30 at a time rather than in one oversized Claude call.
   POOL_TARGET_SIZE: 100,
-  POOL_TOPUP_THRESHOLD: 20, // top up once eligible words drop below this
+
+  // Top up once eligible words drop below this. Equal to DAILY_WORD_COUNT
+  // now that a day is 20 words, which looks tight but isn't: a top-up runs
+  // before the day's set is picked, and failed words stay eligible rather
+  // than going on cooldown, so the eligible count recovers faster than a
+  // day consumes it.
+  POOL_TOPUP_THRESHOLD: 20,
 
   // Pronunciation Assessment pass bar. Two independent checks, both must
   // pass (see scoring.js):

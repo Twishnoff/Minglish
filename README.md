@@ -178,7 +178,27 @@ plays your recording back. Each word keeps its own most recent take, so
 moving between words with the arrows (or a swipe) replays that word's
 attempt. Pressing it mid-playback stops it, and navigating away stops it too.
 
-No deploy steps, no migration, no new secrets — this is frontend-only.
+No deploy steps, no migration, no new secrets — the replay feature is
+frontend-only.
+
+**Also in this round:**
+
+- **No more auto-advance.** A correct answer used to jump to the next word
+  after 1.2 seconds. It now stays put, so you can replay your attempt, hear
+  the reference pronunciation again, or just say it again. Moving on is
+  always an explicit arrow press or swipe.
+- **A day is now 20 words, not 10** (`DAILY_WORD_COUNT` in
+  `worker/src/config.js`). This one *does* need a `wrangler deploy`. It takes
+  effect on the next Pacific day rollover — today's set already exists in
+  `daily_log` and isn't regenerated. No migration or new secrets.
+
+  Worth knowing: at 20/day with a 7-day pass cooldown, roughly 140 words need
+  to be in circulation, above `POOL_TARGET_SIZE` (100). That's fine —
+  `POOL_TARGET_SIZE` is a floor, not a cap, so `ensurePoolTopped` keeps adding
+  20-word batches until enough words are eligible, and the pool settles around
+  140-150. Simulating a year of use (including top-up calls failing outright
+  15% of the time, which `ensurePoolTopped` swallows by design) produced no
+  days with a short word set, so `POOL_TOPUP_THRESHOLD` was left at 20.
 
 **Where the audio lives.** Recordings never leave the browser: nothing is
 uploaded to the Worker and nothing is written to D1, so the backend's
