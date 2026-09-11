@@ -169,6 +169,40 @@ and the backfill route reuses `ANTHROPIC_API_KEY`.
   this logic; left it alone since nothing references it, but flagging it in
   case it's confusing to run into later.
 
+## Sept 11 2026 update — replay your last attempt
+
+A replay button now sits off the mic button's upper-right corner. It's grey
+and non-interactive until you've recorded an attempt at the word on screen;
+once there's something to hear it turns the same accent blue as the mic and
+plays your recording back. Each word keeps its own most recent take, so
+moving between words with the arrows (or a swipe) replays that word's
+attempt. Pressing it mid-playback stops it, and navigating away stops it too.
+
+No deploy steps, no migration, no new secrets — this is frontend-only.
+
+**Where the audio lives.** Recordings never leave the browser: nothing is
+uploaded to the Worker and nothing is written to D1, so the backend's
+"only pass/fail is stored, no audio" property is unchanged. `recordings.js`
+keeps them in IndexedDB keyed by `<pacific-date>:<wordId>`:
+
+- Only the latest take per word is kept — a new attempt overwrites the old one.
+- Everything is cleared on logout.
+- Anything stored under a previous date is purged on the next load, so a day's
+  recordings age out on their own when the calendar day rolls over. The date
+  comes from the server's `today.date` (Pacific), not the device clock.
+- IndexedDB rather than a plain in-memory object so an accidental refresh —
+  easy to do on a phone — doesn't lose the playback. If IndexedDB is
+  unavailable or full (private mode, quota), it falls back to memory for the
+  session and logs a warning; replay still works, it just won't survive a
+  refresh.
+
+**Fixed along the way**: `submitAttempt`/`applyAttemptResult` were re-reading
+`currentWord()` after scoring came back, so navigating to another word while
+an attempt was in flight would apply that result — and now the recording too —
+to whichever word happened to be on screen when the response landed. The word
+is pinned when recording starts and threaded through instead, and the on-screen
+feedback is skipped (the data still updates) if you've moved on since.
+
 ## Decisions made while building this — please sanity-check
 
 A few points in the spec were ambiguous or needed a concrete

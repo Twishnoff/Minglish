@@ -34,6 +34,7 @@ const el = {
   popupClose: document.getElementById('popup-close'),
 
   micBtn: document.getElementById('mic-btn'),
+  replayBtn: document.getElementById('replay-btn'),
   micStatus: document.getElementById('mic-status'),
   attemptFeedback: document.getElementById('attempt-feedback'),
 
@@ -46,7 +47,14 @@ const el = {
 };
 
 let chartInstance = null;
-let ttsAudio = null; // currently-playing Azure TTS <audio>, if any
+let ttsAudio = null;    // currently-playing Azure TTS <audio>, if any
+let replayAudio = null; // currently-playing attempt-playback <audio>, if any
+
+// The word that was on screen when recording started. Used instead of
+// re-reading currentWord() once recording stops, so a swipe/arrow press
+// mid-recording can't file the audio (or the resulting score) against a
+// different word than the one the user was actually looking at.
+let recordingWord = null;
 
 // ---- Login / logout --------------------------------------------------------
 
@@ -69,9 +77,12 @@ el.loginForm.addEventListener('submit', async (e) => {
   }
 });
 
-el.logoutBtn.addEventListener('click', () => {
+el.logoutBtn.addEventListener('click', async () => {
   localStorage.removeItem(STORAGE_KEY);
   state = null;
+  stopReplay();
+  // Attempt recordings are session-scoped -- logging out drops them.
+  await RecordingStore.clear();
   el.appScreen.hidden = true;
   el.loginScreen.hidden = false;
 });
@@ -97,6 +108,11 @@ async function loadState(email) {
   }
   state = await resp.json();
   currentIndex = 0;
+  // Scope stored recordings to the server's Pacific date, so anything left
+  // over from a previous day is dropped rather than replayed under today's
+  // words. Must finish before the first renderWord(), which reads the store
+  // to decide whether the replay button is enabled.
+  await RecordingStore.init(state.today.date);
   renderTopBar();
   renderWord();
   renderChart();
@@ -146,6 +162,10 @@ function renderWord() {
   const words = state.today.words;
   el.wordPopup.hidden = true;
   el.attemptFeedback.hidden = true;
+  // Playback belongs to the word that was on screen -- moving off it stops
+  // whatever is mid-play rather than letting it run over the next word.
+  stopReplay();
+  updateReplayButton();
 
   if (!words || words.length === 0) {
     setWordDisplayText('No words available today.');
@@ -250,6 +270,65 @@ async function playAzureTts(text) {
   await ttsAudio.play();
 }
 
+// ---- Replay the user's own last attempt ------------------------------------
+// Recordings live only in the browser (see recordings.js) -- audio is never
+// uploaded, and the store is scoped to today's date and cleared on logout.
+
+// Enables the button only when there's a recording stored for the word
+// currently on screen, and keeps the tooltip honest about why it's off.
+function updateReplayButton() {
+  const words = state?.today?.words;
+  const w = words && words.length > 0 ? words[currentIndex] : null;
+  const available = !!w && RecordingStore.has(state.today.date, w.wordId);
+
+  el.replayBtn.disabled = !available;
+  el.replayBtn.title = available
+    ? 'Hear your last attempt at this word'
+    : 'Record an attempt first to hear it back';
+}
+
+function stopReplay() {
+  if (!replayAudio) return;
+  replayAudio.pause();
+  URL.revokeObjectURL(replayAudio.src);
+  replayAudio = null;
+  el.replayBtn.classList.remove('playing');
+}
+
+el.replayBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (el.replayBtn.disabled) return;
+
+  // Pressing it again while it's playing stops the playback.
+  if (replayAudio) {
+    stopReplay();
+    return;
+  }
+
+  const w = currentWord();
+  const blob = await RecordingStore.get(state.today.date, w.wordId);
+  if (!blob) {
+    // Store and button state drifted apart somehow -- resync rather than
+    // leaving a button that looks live but does nothing.
+    updateReplayButton();
+    return;
+  }
+
+  // Don't talk over the reference pronunciation if that's still playing.
+  if (ttsAudio) ttsAudio.pause();
+
+  replayAudio = new Audio(URL.createObjectURL(blob));
+  replayAudio.addEventListener('ended', stopReplay);
+  replayAudio.addEventListener('error', stopReplay);
+  el.replayBtn.classList.add('playing');
+  try {
+    await replayAudio.play();
+  } catch (err) {
+    console.error('Playback failed:', err);
+    stopReplay();
+  }
+});
+
 el.prevBtn.addEventListener('click', () => {
   if (currentIndex > 0) {
     currentIndex -= 1;
@@ -320,6 +399,12 @@ async function startRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     recordedChunks = [];
+    // Pin the word as of when recording began -- everything downstream
+    // (the saved recording, the score, the feedback line) is filed against
+    // this word even if the user navigates away while it's in flight.
+    recordingWord = currentWord();
+    const targetWord = recordingWord;
+    stopReplay();
     recorder = new MediaRecorder(stream);
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunks.push(e.data);
@@ -336,7 +421,11 @@ async function startRecording() {
         // sidesteps the whole issue by always sending a format Azure
         // definitely supports, regardless of what the phone recorded in.
         const wavBlob = await convertToWav(rawBlob);
-        submitAttempt(wavBlob);
+        // Store it before scoring, not after: if the Azure call fails or
+        // the network drops, the user can still hear what they said.
+        await RecordingStore.save(state.today.date, targetWord.wordId, wavBlob);
+        updateReplayButton();
+        submitAttempt(wavBlob, targetWord);
       } catch (err) {
         console.error('Audio conversion failed:', err);
         el.micStatus.textContent = "Couldn't process that recording -- try again.";
@@ -447,8 +536,8 @@ function encodeWav(samples, sampleRate) {
   return new Blob([buffer], { type: 'audio/wav; codecs=audio/pcm; samplerate=16000' });
 }
 
-async function submitAttempt(blob) {
-  const w = currentWord();
+async function submitAttempt(blob, word) {
+  const w = word || currentWord();
   const email = currentEmail();
   try {
     const resp = await fetch(
@@ -467,21 +556,31 @@ async function submitAttempt(blob) {
       throw new Error(errBody.error || 'Scoring failed.');
     }
     const result = await resp.json();
-    applyAttemptResult(result);
+    applyAttemptResult(result, w);
   } catch (err) {
     el.micStatus.textContent = err.message || 'Something went wrong scoring that attempt.';
   }
 }
 
-function applyAttemptResult(result) {
+function applyAttemptResult(result, word) {
   el.micStatus.textContent = 'Tap the mic to begin speaking the word. Tap again when finished to submit.';
 
   // Update local word state so re-rendering reflects tries/finalStatus
   // without a full reload.
-  const w = currentWord();
+  const w = word || currentWord();
   w.tries = result.tries;
   if (result.finalStatus) w.finalStatus = result.finalStatus;
   if (typeof result.lateSuccess === 'boolean') w.lateSuccess = result.lateSuccess;
+
+  // If the user navigated to a different word while this attempt was being
+  // scored, the stored state above is still correct, but painting this
+  // result onto the screen would attach it to the wrong word. Update the
+  // data, skip the display.
+  if (w !== currentWord()) {
+    refreshPerformanceOnly();
+    return;
+  }
+
   applyBoxClass(w);
 
   renderMispronunciation(w.text, result.mispronouncedRanges || []);

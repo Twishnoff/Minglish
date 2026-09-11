@@ -239,6 +239,16 @@ main {
 
 /* --- Mic --- */
 .mic-wrap { text-align: center; margin-bottom: 12px; }
+
+/* Anchors the replay button to the mic button so the two travel together.
+   Sized to the mic button exactly (inline-flex, not inline-block, so no
+   baseline gap creeps in), which is what the replay button's offsets below
+   are measured against. */
+.mic-cluster {
+  position: relative;
+  display: inline-flex;
+}
+
 .mic-btn {
   width: 76px;
   height: 76px;
@@ -262,6 +272,48 @@ main {
   100% { box-shadow: 0 0 0 0 rgba(185,28,28,0); }
 }
 .mic-status { color: var(--muted); font-size: 0.9rem; margin-top: 10px; }
+
+/* --- Replay button --- */
+/* Sits off the mic button's upper-right corner with a clear gap, so it
+   reads as a companion control rather than part of the mic itself. Grey
+   and non-interactive until there's a recording of the current word to
+   play; accent blue (matching the mic) once there is. */
+.replay-btn {
+  position: absolute;
+  top: -6px;
+  right: -46px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.replay-btn:not(:disabled) {
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+.replay-btn:not(:disabled):hover { background: var(--accent-dark); }
+.replay-btn:not(:disabled):active { transform: scale(0.94); }
+.replay-btn.playing { background: var(--accent-dark); }
+
+/* The offsets above push the cluster's footprint ~46px to the right of the
+   mic, which throws off the optical centering of the mic itself. Nudging
+   the whole cluster left by half that puts the mic back in the middle of
+   the card with the replay button hanging off its corner. */
+.mic-cluster { transform: translateX(-23px); }
+
+@media (max-width: 380px) {
+  .replay-btn { width: 36px; height: 36px; right: -40px; top: -4px; }
+  .mic-cluster { transform: translateX(-20px); }
+}
 
 .attempt-feedback {
   text-align: center;
