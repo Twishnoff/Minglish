@@ -204,8 +204,8 @@ function renderWord() {
   }
 }
 
-// Sets the practice word's plain text, clearing any mispronunciation
-// underline left over from a previous attempt (see renderMispronunciation).
+// Sets the practice word's plain text, clearing any red/green pronunciation
+// coloring left over from a previous attempt (see renderMispronunciation).
 function setWordDisplayText(text) {
   el.wordDisplay.textContent = text;
 }
@@ -613,32 +613,36 @@ function applyAttemptResult(result, word) {
   // swipe.
 }
 
-// Redraws the practice word with the letters Azure's pronunciation
-// assessment scored lowest on (per the most recent attempt) underlined in
-// deep red -- see azure.js buildMispronunciationRanges on the backend for
-// how those ranges are derived (word-level is exact; sub-word placement
-// within a word is a heuristic approximation).
+// Redraws the practice word color-coded by the most recent attempt: the
+// letters Azure's pronunciation assessment scored lowest on go red, every
+// other letter goes green to signal "no issue here" -- see azure.js
+// buildMispronunciationRanges on the backend for how those ranges are
+// derived (word-level is exact; sub-word placement within a word is a
+// heuristic approximation).
+//
+// Only ever called with the result of a scored attempt, so an empty range
+// list means nothing was flagged and the whole word turns green.
 function renderMispronunciation(text, ranges) {
-  if (!ranges || ranges.length === 0) {
-    setWordDisplayText(text);
-    return;
-  }
-  const sorted = [...ranges].sort((a, b) => a.start - b.start);
   el.wordDisplay.textContent = '';
+
+  const addSpan = (slice, className) => {
+    if (!slice) return;
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = slice;
+    el.wordDisplay.appendChild(span);
+  };
+
+  const sorted = [...(ranges || [])].sort((a, b) => a.start - b.start);
   let cursor = 0;
   for (const r of sorted) {
     const start = Math.max(cursor, Math.min(r.start, text.length));
     const end = Math.max(start, Math.min(r.end, text.length));
-    if (start > cursor) el.wordDisplay.appendChild(document.createTextNode(text.slice(cursor, start)));
-    if (end > start) {
-      const span = document.createElement('span');
-      span.className = 'mispronounced';
-      span.textContent = text.slice(start, end);
-      el.wordDisplay.appendChild(span);
-    }
+    addSpan(text.slice(cursor, start), 'pronounced-ok');
+    addSpan(text.slice(start, end), 'mispronounced');
     cursor = Math.max(cursor, end);
   }
-  if (cursor < text.length) el.wordDisplay.appendChild(document.createTextNode(text.slice(cursor)));
+  addSpan(text.slice(cursor), 'pronounced-ok');
 }
 
 async function refreshPerformanceOnly() {

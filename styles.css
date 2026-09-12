@@ -162,7 +162,7 @@ main {
 .word-counter { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 
 /* --- Word display / popup --- */
-#word-display-wrap { position: relative; text-align: center; margin-bottom: 20px; }
+#word-display-wrap { position: relative; text-align: center; margin-bottom: 34px; }
 .word-display {
   font-size: 1.8rem;
   font-weight: 700;
@@ -176,15 +176,14 @@ main {
 }
 .word-display:hover { color: var(--accent); }
 
-/* Underlines the specific letters Azure's pronunciation assessment scored
-   lowest on for the most recent attempt (see app.js renderMispronunciation
-   -- an approximation, not an exact letter-by-letter alignment). */
-.mispronounced {
-  text-decoration: underline;
-  text-decoration-color: #991b1b;
-  text-decoration-thickness: 3px;
-  text-underline-offset: 4px;
-}
+/* Colors the letters of the practice word by how the most recent attempt
+   scored (see app.js renderMispronunciation -- an approximation, not an
+   exact letter-by-letter alignment). Red = the letters Azure's
+   pronunciation assessment scored lowest on; green = no issue detected.
+   Both only ever appear right after a scored attempt; the untried word
+   stays the default text color. */
+.mispronounced { color: var(--red); }
+.pronounced-ok { color: var(--green); }
 
 .ipa-row {
   display: flex;
@@ -238,7 +237,11 @@ main {
 .popup-close:hover { background: #e5e7eb; }
 
 /* --- Mic --- */
-.mic-wrap { text-align: center; margin-bottom: 12px; }
+/* The mic/replay cluster gets generous breathing room above and below so
+   the word above it and the example below it don't crowd the controls. The
+   one line that stays tucked up against the mic is .mic-status, which is
+   instructions for the button itself. */
+.mic-wrap { text-align: center; margin: 0 0 34px; }
 
 /* Anchors the replay button to the mic button so the two travel together.
    Sized to the mic button exactly (inline-flex, not inline-block, so no
@@ -271,7 +274,7 @@ main {
   70% { box-shadow: 0 0 0 14px rgba(185,28,28,0); }
   100% { box-shadow: 0 0 0 0 rgba(185,28,28,0); }
 }
-.mic-status { color: var(--muted); font-size: 0.9rem; margin-top: 10px; }
+.mic-status { color: #9ca3af; font-size: 0.9rem; margin: 10px 0 0; }
 
 /* --- Replay button --- */
 /* Sits off the mic button's upper-right corner with a clear gap, so it
@@ -327,7 +330,21 @@ main {
 .attempt-feedback.pending { background: #fef3c7; color: var(--orange); }
 .attempt-feedback.late { background: #fef9c3; color: #92730a; }
 
-.nav-arrows { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 16px; }
+/* Three-column grid with two rows: the EXAMPLE label sits alone on row 1,
+   and the arrows share row 2 with the example sentence so they center on
+   the sentence itself rather than on the whole label+sentence block. The
+   .example-box wrapper is display:contents (below) so its label and
+   sentence act as grid items directly. */
+.nav-arrows {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  margin-top: 22px;
+}
+.nav-arrows > .arrow-btn:first-child { grid-column: 1; grid-row: 2; }
+.nav-arrows > .arrow-btn:last-child { grid-column: 3; grid-row: 2; }
 .arrow-btn {
   border: 1px solid var(--border);
   background: white;
@@ -340,17 +357,24 @@ main {
 .arrow-btn:hover { background: #f3f4f6; }
 .arrow-btn:disabled { opacity: 0.4; cursor: default; }
 
-.example-box { flex: 1; min-width: 0; text-align: center; }
+.example-box { display: contents; }
 .example-label {
+  grid-column: 2;
+  grid-row: 1;
   display: block;
-  font-size: 0.72rem;
+  text-align: center;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .example-sentence {
+  grid-column: 2;
+  grid-row: 2;
   margin: 0;
+  min-width: 0;
+  text-align: center;
   font-size: 0.92rem;
   color: var(--text);
   font-style: italic;
