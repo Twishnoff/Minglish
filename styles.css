@@ -205,6 +205,11 @@ main {
   flex: none;
 }
 .speak-btn:hover { background: #e5e7eb; }
+.speak-btn:disabled { opacity: 0.4; cursor: default; }
+.speak-btn:disabled:hover { background: #f3f4f6; }
+/* Smaller variant used next to the EXAMPLE label, so the button reads as a
+   companion to the label rather than competing with the word's speak button. */
+.speak-btn-sm { width: 28px; height: 28px; font-size: 0.85rem; }
 
 .word-popup {
   position: absolute;
@@ -361,7 +366,12 @@ main {
 .example-label {
   grid-column: 2;
   grid-row: 1;
-  display: block;
+  /* Flex row so the speak button sits right of the word "EXAMPLE" and the
+     pair stays centered over the sentence. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   font-size: 1rem;
   font-weight: 700;

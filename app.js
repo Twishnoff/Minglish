@@ -41,6 +41,7 @@ const el = {
   prevBtn: document.getElementById('prev-btn'),
   nextBtn: document.getElementById('next-btn'),
   exampleSentence: document.getElementById('example-sentence'),
+  exampleSpeakBtn: document.getElementById('example-speak-btn'),
 
   chartCanvas: document.getElementById('performance-chart'),
   chartEmpty: document.getElementById('chart-empty'),
@@ -165,12 +166,14 @@ function renderWord() {
   // Playback belongs to the word that was on screen -- moving off it stops
   // whatever is mid-play rather than letting it run over the next word.
   stopReplay();
+  stopTts();
   updateReplayButton();
 
   if (!words || words.length === 0) {
     setWordDisplayText('No words available today.');
     el.wordIpa.textContent = '';
     el.exampleSentence.textContent = '';
+    updateExampleSpeakButton('');
     el.wordCounter.textContent = '0/0';
     el.micBtn.disabled = true;
     el.prevBtn.disabled = true;
@@ -184,6 +187,7 @@ function renderWord() {
   el.wordIpa.textContent = w.ipa || '';
   el.popupMandarin.textContent = w.mandarin;
   el.exampleSentence.textContent = w.example || '';
+  updateExampleSpeakButton(w.example);
   el.wordCounter.textContent = `${currentIndex + 1}/${words.length}`;
   el.micBtn.disabled = false;
 
@@ -238,14 +242,40 @@ document.addEventListener('click', () => {
 
 el.speakBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
-  const text = currentWord().text;
+  await speak(currentWord().text);
+});
+
+// Same treatment for the example sentence: the button beside the EXAMPLE
+// label reads the sentence in that box, through the same Azure voice.
+el.exampleSpeakBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (el.exampleSpeakBtn.disabled) return;
+  const w = currentWord();
+  if (!w || !w.example) return;
+  await speak(w.example);
+});
+
+// Off (and explained in the tooltip) for any word that has no example yet --
+// older pool rows predate the example column, see the backfill route.
+function updateExampleSpeakButton(example) {
+  const available = !!example;
+  el.exampleSpeakBtn.disabled = !available;
+  el.exampleSpeakBtn.title = available
+    ? 'Hear the example sentence spoken'
+    : 'No example sentence for this word yet';
+}
+
+async function speak(text) {
+  if (!text) return;
+  // Don't let a recording playback and the reference voice overlap.
+  stopReplay();
   try {
     await playAzureTts(text);
   } catch (err) {
     console.error('Azure TTS failed, falling back to browser voice:', err);
     speakWithBrowserVoice(text);
   }
-});
+}
 
 function speakWithBrowserVoice(text) {
   const utter = new SpeechSynthesisUtterance(text);
@@ -262,12 +292,19 @@ async function playAzureTts(text) {
   if (!resp.ok) throw new Error('TTS request failed');
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
-  if (ttsAudio) {
-    ttsAudio.pause();
-    URL.revokeObjectURL(ttsAudio.src);
-  }
+  stopTts();
   ttsAudio = new Audio(url);
+  ttsAudio.addEventListener('ended', stopTts);
+  ttsAudio.addEventListener('error', stopTts);
   await ttsAudio.play();
+}
+
+function stopTts() {
+  window.speechSynthesis.cancel();
+  if (!ttsAudio) return;
+  ttsAudio.pause();
+  URL.revokeObjectURL(ttsAudio.src);
+  ttsAudio = null;
 }
 
 // ---- Replay the user's own last attempt ------------------------------------
@@ -315,7 +352,7 @@ el.replayBtn.addEventListener('click', async (e) => {
   }
 
   // Don't talk over the reference pronunciation if that's still playing.
-  if (ttsAudio) ttsAudio.pause();
+  stopTts();
 
   replayAudio = new Audio(URL.createObjectURL(blob));
   replayAudio.addEventListener('ended', stopReplay);

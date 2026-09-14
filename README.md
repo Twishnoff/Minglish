@@ -92,7 +92,8 @@ seconds).
 Implements the requests from the "Minglish Feature Requests" doc: a working
 performance chart, a simplified word popup (Mandarin translation + close
 only), IPA transcription + speak button moved below the word, an example
-sentence per word, accuracy-only attempt feedback, plus best-effort takes on
+sentence per word (with its own speak button beside the EXAMPLE label, using
+the same Azure Neural TTS voice as the word), accuracy-only attempt feedback, plus best-effort takes on
 the three "see if there's a way" asks (mispronunciation highlighting, a more
 natural TTS voice, faster scoring). Deploying it requires two things beyond
 the usual `wrangler deploy`:
